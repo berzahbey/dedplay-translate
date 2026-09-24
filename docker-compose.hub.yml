@@ -1,0 +1,44 @@
+name: dedplay-ceviri
+services:
+  ollama:
+    image: ollama/ollama:latest
+    container_name: dedplay-ceviri-ollama
+    restart: unless-stopped
+    volumes:
+      - /DATA/AppData/dedplay-ceviri/ollama:/root/.ollama
+    environment:
+      - OLLAMA_KEEP_ALIVE=30m
+      - OLLAMA_NUM_PARALLEL=1
+
+  app:
+    image: berzahbey/dedplay-ceviri:latest
+    container_name: dedplay-ceviri
+    restart: unless-stopped
+    depends_on:
+      - ollama
+    ports:
+      - "8060:8000"
+    volumes:
+      - /DATA/AppData/dedplay-ceviri/data:/data
+    environment:
+      - OLLAMA_URL=http://ollama:11434
+      - LLM_MODEL=gemma3:12b
+      - LLM_CTX=4096
+
+x-casaos:
+  architectures:
+    - amd64
+  main: app
+  author: berzahbey
+  developer: berzahbey
+  category: Utilities
+  index: /
+  port_map: "8060"
+  scheme: http
+  icon: https://raw.githubusercontent.com/berzahbey/dedplay-ceviri/main/icon.png
+  title:
+    en_us: Dedplay Çeviri
+  tagline:
+    en_us: Arapça, İngilizce ve Fransızca kitapları Türkçeye çevirir
+  description:
+    en_us: Yerel LLM (Ollama, Gemma 3 12B) ile tamamen sunucuda çalışan kitap çevirici. EPUB, PDF, DOCX, TXT, PNG, JPEG girdi; EPUB, Word, PDF, HTML, TXT çıktı.
