@@ -11,7 +11,7 @@ services:
 
   app:
     build: .
-    image: berzahbey/dedplay-ceviri:latest
+    image: berzahbey/dedplay-translate:latest
     container_name: dedplay-ceviri
     restart: unless-stopped
     depends_on:

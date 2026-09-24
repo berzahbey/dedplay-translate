@@ -1,6 +1,6 @@
-# Dedplay Çeviri
+# Dedplay Translate
 
-<img src="icon.png" width="160" alt="Dedplay Çeviri ikonu">
+<img src="icon.png" width="160" alt="Dedplay Translate ikonu">
 
 Arapça, İngilizce ve Fransızca kitapları Türkçeye çeviren, tamamen yerelde çalışan uygulama.
 Çeviri, Ollama üzerinde çalışan Gemma 3 12B modeliyle yapılır. Ücretsizdir; kitaplar sunucudan dışarı çıkmaz.
@@ -17,8 +17,8 @@ Arapça, İngilizce ve Fransızca kitapları Türkçeye çeviren, tamamen yereld
 ## Kurulum 1: Docker Hub'dan (önerilen)
 
 ```bash
-mkdir -p /DATA/dedplay-ceviri && cd /DATA/dedplay-ceviri
-curl -L -o docker-compose.yml https://raw.githubusercontent.com/berzahbey/dedplay-ceviri/main/docker-compose.hub.yml
+mkdir -p /DATA/dedplay-translate && cd /DATA/dedplay-translate
+curl -L -o docker-compose.yml https://raw.githubusercontent.com/berzahbey/dedplay-translate/main/docker-compose.hub.yml
 docker compose up -d
 ```
 
@@ -27,15 +27,15 @@ ZimaOS / CasaOS: Uygulama mağazasında "Özel kurulum > İçe aktar" ile `docke
 ## Kurulum 2: Kaynak koddan
 
 ```bash
-git clone https://github.com/berzahbey/dedplay-ceviri.git /DATA/dedplay-ceviri
-cd /DATA/dedplay-ceviri
+git clone https://github.com/berzahbey/dedplay-translate.git /DATA/dedplay-translate
+cd /DATA/dedplay-translate
 docker compose up -d --build
 ```
 
 Adres: `http://<sunucu-ip>:8060`
 
 İlk açılışta model (~8 GB) indirilir; arayüzdeki durum satırı "Hazır" olunca çeviri başlar.
-Veriler `/DATA/AppData/dedplay-ceviri/` altında tutulur.
+Veriler `/DATA/AppData/dedplay-translate/` altında tutulur.
 
 ## Ayarlar
 

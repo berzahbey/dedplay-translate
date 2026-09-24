@@ -11,7 +11,7 @@ from . import db
 from .export import build
 from .worker import worker
 
-app = FastAPI(title="Dedplay Çeviri")
+app = FastAPI(title="Dedplay Translate")
 STATIC = os.path.join(os.path.dirname(__file__), "static")
 ALLOWED = {".epub", ".pdf", ".docx", ".txt", ".png", ".jpg", ".jpeg", ".webp", ".tif", ".tiff"}
 LANGS = {"auto", "ar", "en", "fr"}

@@ -1,25 +1,25 @@
-name: dedplay-ceviri
+name: dedplay-translate
 services:
   ollama:
     image: ollama/ollama:latest
-    container_name: dedplay-ceviri-ollama
+    container_name: dedplay-translate-ollama
     restart: unless-stopped
     volumes:
-      - /DATA/AppData/dedplay-ceviri/ollama:/root/.ollama
+      - /DATA/AppData/dedplay-translate/ollama:/root/.ollama
     environment:
       - OLLAMA_KEEP_ALIVE=30m
       - OLLAMA_NUM_PARALLEL=1
 
   app:
-    image: berzahbey/dedplay-ceviri:latest
-    container_name: dedplay-ceviri
+    image: berzahbey/dedplay-translate:latest
+    container_name: dedplay-translate
     restart: unless-stopped
     depends_on:
       - ollama
     ports:
       - "8060:8000"
     volumes:
-      - /DATA/AppData/dedplay-ceviri/data:/data
+      - /DATA/AppData/dedplay-translate/data:/data
     environment:
       - OLLAMA_URL=http://ollama:11434
       - LLM_MODEL=gemma3:12b
@@ -35,9 +35,9 @@ x-casaos:
   index: /
   port_map: "8060"
   scheme: http
-  icon: https://raw.githubusercontent.com/berzahbey/dedplay-ceviri/main/icon.png
+  icon: https://raw.githubusercontent.com/berzahbey/dedplay-translate/main/icon.png
   title:
-    en_us: Dedplay Çeviri
+    en_us: Dedplay Translate
   tagline:
     en_us: Arapça, İngilizce ve Fransızca kitapları Türkçeye çevirir
   description:
