@@ -8,7 +8,9 @@ ARABIC = re.compile(r"[\u0600-\u06FF\u0750-\u077F\uFB50-\uFDFF\uFE70-\uFEFF]")
 LETTER = re.compile(r"[^\W\d_]")
 TR_CHARS = re.compile(r"[çğışöüÇĞİŞÖÜ]")
 TR_WORDS = re.compile(r"\b(ve|bir|bu|ile|için|olan|olarak|da|de|ki|gibi|daha|çok|ise|değil)\b", re.I)
-TASHKEEL = re.compile(r"[\u064B-\u0652\u0670\u0640]")
+TASHKEEL = re.compile(r"[\u0610-\u061A\u064B-\u065F\u0670\u06D6-\u06ED\u08D3-\u08FF\u0640]")
+QURAN_MARKS = re.compile(r"[\u06D6-\u06ED\u08D3-\u08FF\u0671]")
+ALEF = str.maketrans({"ٱ": "ا", "أ": "ا", "إ": "ا", "آ": "ا", "ى": "ي"})
 
 SYSTEM = """Sen dini, felsefi, tarihî ve sosyolojik eserler konusunda uzman, deneyimli bir çevirmensin. Arapça, İngilizce ve Fransızca metinleri Türkçeye çeviriyorsun.
 
@@ -72,13 +74,22 @@ def split_long(text, maxlen=1500):
     return chunks
 
 
+def is_quranic(text):
+    return len(QURAN_MARKS.findall(text)) >= 2
+
+
 def _match_key(s):
-    return TASHKEEL.sub("", s).lower()
+    return TASHKEEL.sub("", s).translate(ALEF).lower()
+
+
+def _match_keys(s):
+    # Osmani yazimdaki kucuk elif hem elif hem yok sayilarak denenir
+    return {_match_key(s), _match_key(s.replace("\u0670", "ا"))}
 
 
 def matching_terms(glossary, text):
-    key = _match_key(text)
-    return [(s, t) for s, t in glossary if _match_key(s) in key]
+    keys = _match_keys(text)
+    return [(s, t) for s, t in glossary if any(_match_key(s) in k for k in keys)]
 
 
 def clean_output(out, src):

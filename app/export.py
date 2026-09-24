@@ -3,7 +3,15 @@ import io
 import os
 import tempfile
 
-from .translate import arabic_ratio
+from .translate import arabic_ratio, is_quranic
+
+QURAN_FONT = "/usr/share/fonts/truetype/amiri-quran/AmiriQuran-Regular.ttf"
+
+
+def _src_attrs(src):
+    rtl = arabic_ratio(src) > 0.3
+    cls = "src quran" if rtl and is_quranic(src) else "src"
+    return cls, ("rtl" if rtl else "ltr"), ("ar" if rtl else "")
 
 CSS = """
 body { font-family: serif; line-height: 1.6; }
@@ -11,6 +19,8 @@ h2 { margin: 1.5em 0 .8em; }
 p { margin: 0 0 .9em; text-align: justify; }
 p.src { color: #666; font-size: .92em; margin-bottom: .3em; }
 p.src[dir=rtl] { text-align: right; font-size: 1.05em; }
+@font-face { font-family: "Amiri Quran"; src: url(fonts/AmiriQuran.ttf); }
+p.src.quran { font-family: "Amiri Quran", serif; font-size: 1.25em; line-height: 2.1; }
 """
 
 
@@ -52,6 +62,9 @@ def to_epub(title, segments, bilingual, job_id):
     book.set_language("tr")
     style = epub.EpubItem(uid="style", file_name="style.css", media_type="text/css", content=CSS)
     book.add_item(style)
+    if bilingual and os.path.exists(QURAN_FONT):
+        book.add_item(epub.EpubItem(uid="amiri", file_name="fonts/AmiriQuran.ttf",
+                                    media_type="font/ttf", content=open(QURAN_FONT, "rb").read()))
 
     items = []
     for n, (head, segs) in enumerate(_chapters(segments), 1):
@@ -59,8 +72,8 @@ def to_epub(title, segments, bilingual, job_id):
         body = [f"<h2>{html.escape(name)}</h2>"]
         for s in segs:
             if bilingual and s["out"] and s["out"] != s["src"]:
-                d = "rtl" if arabic_ratio(s["src"]) > 0.3 else "ltr"
-                body.append(f'<p class="src" dir="{d}">{html.escape(s["src"])}</p>')
+                cls, d, lang = _src_attrs(s["src"])
+                body.append(f'<p class="{cls}" dir="{d}">{html.escape(s["src"])}</p>')
             body.append(f"<p>{html.escape(_text(s))}</p>")
         ch = epub.EpubHtml(title=name[:80], file_name=f"bolum_{n:04d}.xhtml", lang="tr")
         ch.content = "<html><body>" + "\n".join(body) + "</body></html>"
@@ -89,6 +102,19 @@ def _rtl(paragraph):
         run._r.get_or_add_rPr().append(OxmlElement("w:rtl"))
 
 
+def _quran_font(run):
+    from docx.oxml import OxmlElement
+    from docx.oxml.ns import qn
+
+    run.font.name = "Amiri Quran"
+    rpr = run._r.get_or_add_rPr()
+    fonts = rpr.find(qn("w:rFonts"))
+    if fonts is None:
+        fonts = OxmlElement("w:rFonts")
+        rpr.insert(0, fonts)
+    fonts.set(qn("w:cs"), "Amiri Quran")
+
+
 def to_docx(title, segments, bilingual):
     import docx
     from docx.shared import Pt, RGBColor
@@ -106,6 +132,9 @@ def to_docx(title, segments, bilingual):
             r.font.color.rgb = RGBColor(0x66, 0x66, 0x66)
             r.font.size = Pt(10.5)
             if arabic_ratio(s["src"]) > 0.3:
+                if is_quranic(s["src"]):
+                    _quran_font(r)
+                    r.font.size = Pt(14)
                 _rtl(p)
         d.add_paragraph(_text(s))
     buf = io.BytesIO()
@@ -124,6 +153,7 @@ h2 { font-size: 1.4em; margin: 2.5em 0 1em; }
 p { margin: 0 0 .9em; text-align: justify; hyphens: auto; }
 p.src { color: #777; font-size: .92em; margin-bottom: .3em; }
 p.src[dir=rtl] { font-family: "Noto Naskh Arabic", serif; font-size: 1.1em; text-align: right; }
+p.src.quran { font-family: "Amiri Quran", "Noto Naskh Arabic", serif; font-size: 1.35em; line-height: 2.2; }
 """
 
 PDF_CSS = """
@@ -140,10 +170,15 @@ h2.new-page { page-break-before: always; margin-top: 30pt; }
 p { margin: 0 0 7pt; text-align: justify; hyphens: auto; orphans: 2; widows: 2; }
 p.src { color: #666; font-size: 9pt; margin-bottom: 3pt; }
 p.src[dir=rtl] { font-family: "Noto Naskh Arabic", serif; font-size: 10.5pt; text-align: right; }
+p.src.quran { font-family: "Amiri Quran", "Noto Naskh Arabic", serif; font-size: 12.5pt; line-height: 2.1; }
 """
 
 
-def to_html(title, segments, bilingual, css=HTML_CSS):
+FONT_LINK = ('<link rel="stylesheet" href="https://fonts.googleapis.com/css2?'
+             'family=Amiri+Quran&family=Noto+Naskh+Arabic&family=Noto+Serif:wght@400;700&display=swap">')
+
+
+def to_html(title, segments, bilingual, css=HTML_CSS, head=FONT_LINK):
     chapters = _chapters(segments)
     body, toc = [], []
     for n, (head, segs) in enumerate(chapters, 1):
@@ -154,15 +189,14 @@ def to_html(title, segments, bilingual, css=HTML_CSS):
             toc.append(f'<li><a href="#b{n}">{name}</a></li>')
         for s in segs:
             if bilingual and s["out"] and s["out"] != s["src"]:
-                d = "rtl" if arabic_ratio(s["src"]) > 0.3 else "ltr"
-                lang = "ar" if d == "rtl" else ""
-                body.append(f'<p class="src" dir="{d}" lang="{lang}">{html.escape(s["src"])}</p>')
+                cls, d, lang = _src_attrs(s["src"])
+                body.append(f'<p class="{cls}" dir="{d}" lang="{lang}">{html.escape(s["src"])}</p>')
             body.append(f"<p>{html.escape(_text(s))}</p>")
     nav = f"<nav><h2>İçindekiler</h2><ol>{''.join(toc)}</ol></nav>" if len(toc) > 1 else ""
     t = html.escape(title)
     doc = (f'<!doctype html><html lang="tr"><head><meta charset="utf-8">'
            f'<meta name="viewport" content="width=device-width, initial-scale=1">'
-           f"<title>{t}</title><style>{css}</style></head><body>"
+           f"<title>{t}</title>{head}<style>{css}</style></head><body>"
            f'<div class="title"><h1>{t}</h1><p>Türkçe çeviri</p></div>{nav}'
            + "\n".join(body) + "</body></html>")
     return doc.encode("utf-8")
@@ -171,7 +205,7 @@ def to_html(title, segments, bilingual, css=HTML_CSS):
 def to_pdf(title, segments, bilingual):
     from weasyprint import HTML
 
-    return HTML(string=to_html(title, segments, bilingual, css=PDF_CSS).decode("utf-8")).write_pdf()
+    return HTML(string=to_html(title, segments, bilingual, css=PDF_CSS, head="").decode("utf-8")).write_pdf()
 
 
 def build(job, segments, fmt, bilingual):

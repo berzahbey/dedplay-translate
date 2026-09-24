@@ -8,7 +8,7 @@
 <link rel="icon" type="image/png" sizes="32x32" href="/static/icon-32.png">
 <link rel="apple-touch-icon" href="/static/icon-180.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Literata:opsz,wght@7..72,400;7..72,600&family=Noto+Naskh+Arabic:wght@400;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Literata:opsz,wght@7..72,400;7..72,600&family=Noto+Naskh+Arabic:wght@400;600&family=Amiri+Quran&display=swap" rel="stylesheet">
 <style>
 :root {
   --paper: #f2f4f1; --surface: #ffffff; --ink: #1c2b2a; --muted: #5f6d6a;
@@ -65,6 +65,7 @@ button:focus-visible, select:focus-visible, input:focus-visible, summary:focus-v
 .spread > div { padding: 16px 20px; font: 1rem/1.75 var(--serif); }
 .spread .src { border-right: 1px solid var(--line); color: var(--muted); }
 .spread .src[dir=rtl] { font-family: var(--naskh); font-size: 1.15rem; line-height: 1.9; text-align: right; }
+.spread .src.quran { font-family: "Amiri Quran", var(--naskh); font-size: 1.35rem; line-height: 2.2; }
 .spread.h > div { font-weight: 600; }
 @media (max-width: 640px) {
   .spread { grid-template-columns: 1fr; }
@@ -125,6 +126,7 @@ td:last-child { width: 1%; }
 <script>
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const isQuran = (s) => (s.match(/[\u06D6-\u06ED\u08D3-\u08FF\u0671]/g) || []).length >= 2;
 const isAr = (s) => (s.match(/[\u0600-\u06FF]/g) || []).length > s.length * 0.3;
 const open = new Set();
 const STATES = { queued: "Sırada", running: "Çevriliyor", paused: "Duraklatıldı", done: "Tamamlandı", error: "Durdu" };
@@ -186,7 +188,7 @@ async function loadPreview(li, id) {
   const pairs = await api(`/api/jobs/${id}/preview`);
   li.querySelector(".pv").innerHTML = pairs.length ? `<div class="book">${pairs.map(p => `
     <div class="spread ${p.kind === "h" ? "h" : ""}">
-      <div class="src" dir="${isAr(p.src) ? "rtl" : "ltr"}">${esc(p.src)}</div>
+      <div class="src${isAr(p.src) && isQuran(p.src) ? " quran" : ""}" dir="${isAr(p.src) ? "rtl" : "ltr"}">${esc(p.src)}</div>
       <div>${esc(p.out)}</div>
     </div>`).join("")}</div>` : `<p class="hint">Henüz gösterilecek çeviri yok.</p>`;
 }
