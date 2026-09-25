@@ -1,10 +1,11 @@
+name: dedplay-translate
 services:
   ollama:
     image: ollama/ollama:latest
-    container_name: dedplay-ceviri-ollama
+    container_name: dedplay-translate-ollama
     restart: unless-stopped
     volumes:
-      - /DATA/AppData/dedplay-ceviri/ollama:/root/.ollama
+      - /DATA/AppData/dedplay-translate/ollama:/root/.ollama
     environment:
       - OLLAMA_KEEP_ALIVE=30m
       - OLLAMA_NUM_PARALLEL=1
@@ -12,14 +13,14 @@ services:
   app:
     build: .
     image: berzahbey/dedplay-translate:latest
-    container_name: dedplay-ceviri
+    container_name: dedplay-translate
     restart: unless-stopped
     depends_on:
       - ollama
     ports:
       - "8060:8000"
     volumes:
-      - /DATA/AppData/dedplay-ceviri/data:/data
+      - /DATA/AppData/dedplay-translate/data:/data
     environment:
       - OLLAMA_URL=http://ollama:11434
       - LLM_MODEL=gemma3:12b
