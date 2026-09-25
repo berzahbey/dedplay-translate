@@ -15,6 +15,7 @@ app = FastAPI(title="Dedplay Translate")
 STATIC = os.path.join(os.path.dirname(__file__), "static")
 ALLOWED = {".epub", ".pdf", ".docx", ".txt", ".png", ".jpg", ".jpeg", ".webp", ".tif", ".tiff"}
 LANGS = {"auto", "ar", "en", "fr"}
+KAYNAK = os.environ.get("KAYNAK_DIR", "/kaynak")
 app.mount("/static", StaticFiles(directory=STATIC), name="static")
 
 
@@ -64,6 +65,55 @@ def create_job(file: UploadFile = File(...), src_lang: str = Form("auto")):
     job_id = db.create_job(name, src_lang)
     with open(db.upload_path(job_id, name), "wb") as f:
         shutil.copyfileobj(file.file, f)
+    db.set_status(job_id, "queued")
+    return {"id": job_id}
+
+
+def _safe(rel):
+    base = os.path.realpath(KAYNAK)
+    p = os.path.realpath(os.path.join(base, (rel or "").lstrip("/")))
+    if p != base and not p.startswith(base + os.sep):
+        raise HTTPException(400, "Geçersiz yol")
+    return p
+
+
+@app.get("/api/browse")
+def browse(path: str = ""):
+    if not os.path.isdir(KAYNAK):
+        return {"available": False, "path": "", "dirs": [], "files": []}
+    p = _safe(path)
+    if not os.path.isdir(p):
+        raise HTTPException(404, "Klasör bulunamadı")
+    dirs, files = [], []
+    for e in sorted(os.scandir(p), key=lambda e: e.name.lower()):
+        if e.name.startswith("."):
+            continue
+        try:
+            if e.is_dir():
+                dirs.append(e.name)
+            elif os.path.splitext(e.name)[1].lower() in ALLOWED:
+                files.append({"name": e.name, "size": e.stat().st_size})
+        except OSError:
+            continue
+    rel = os.path.relpath(p, os.path.realpath(KAYNAK))
+    return {"available": True, "path": "" if rel == "." else rel, "dirs": dirs, "files": files}
+
+
+class ServerFile(BaseModel):
+    path: str
+    src_lang: str = "auto"
+
+
+@app.post("/api/jobs/from-server")
+def job_from_server(f: ServerFile):
+    p = _safe(f.path)
+    if not os.path.isfile(p):
+        raise HTTPException(404, "Dosya bulunamadı")
+    name = os.path.basename(p)
+    if os.path.splitext(name)[1].lower() not in ALLOWED:
+        raise HTTPException(400, "Bu dosya türü desteklenmiyor.")
+    job_id = db.create_job(name, f.src_lang if f.src_lang in LANGS else "auto")
+    shutil.copyfile(p, db.upload_path(job_id, name))
     db.set_status(job_id, "queued")
     return {"id": job_id}
 

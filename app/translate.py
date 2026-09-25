@@ -25,6 +25,25 @@ Kurallar:
 - Yalnızca çeviriyi yaz. Başlık, not, tırnak, "Çeviri:" gibi ekler koyma."""
 
 
+REFUSAL = re.compile(
+    r"(anlaml[ıi] bir çeviri|çeviri yapabilmek için|çeviri yapmak mümkün değil|doğru ve anlamlı|"
+    r"daha fazla bilgi(ye)? ihtiyaç|metnin kaynağı|bağlam(ı|i)? (veya|ya da|hakkında)|"
+    r"çeviremiyorum|çevrilemiyor|çevirmem mümkün değil|sembol(ler)?(in)? ve kelime|anlamsız (bir )?(metin|dizi)|"
+    r"I('m| am) (sorry|unable)|I cannot|I can't|cannot translate|unable to translate)",
+    re.I,
+)
+STRICT_NOTE = ("ÖNEMLİ: Metin bozuk, eksik veya anlamsız görünse bile açıklama yapma, yorum yazma, "
+               "bilgi isteme. Sadece metnin Türkçe karşılığını yaz; çevrilemeyen kelimeleri olduğu gibi bırak.")
+
+
+class RefusalError(Exception):
+    """Model çeviri yerine açıklama/ret cevabı verdi."""
+
+
+def is_refusal(out, src):
+    return bool(REFUSAL.search(out)) and not REFUSAL.search(src)
+
+
 def arabic_ratio(text):
     letters = len(LETTER.findall(text)) or 1
     return len(ARABIC.findall(text)) / letters
@@ -131,7 +150,7 @@ class OllamaEngine:
     def translate(self, text, kind, glossary, prev):
         return " ".join(self._one(c, kind, glossary, prev) for c in split_long(text))
 
-    def _one(self, text, kind, glossary, prev):
+    def _one(self, text, kind, glossary, prev, strict=False):
         parts = []
         terms = matching_terms(glossary, text)
         if terms:
@@ -140,6 +159,8 @@ class OllamaEngine:
         if prev and kind == "p":
             parts.append("Bir önceki paragrafın çevirisi (yalnızca bağlam için, tekrar yazma):\n" + prev[-400:])
         what = "başlığı" if kind == "h" else "metni"
+        if strict:
+            parts.append(STRICT_NOTE)
         parts.append(f"Aşağıdaki {what} Türkçeye çevir:\n<<<\n{text}\n>>>")
 
         options = {
@@ -169,4 +190,8 @@ class OllamaEngine:
         out = clean_output(r.json()["message"]["content"], text)
         if not out:
             raise RuntimeError("Model boş cevap döndü")
+        if is_refusal(out, text):
+            if not strict:
+                return self._one(text, kind, glossary, prev, strict=True)
+            raise RefusalError(out[:200])
         return out

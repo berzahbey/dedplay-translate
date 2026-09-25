@@ -21,6 +21,7 @@ services:
       - "8060:8000"
     volumes:
       - /DATA/AppData/dedplay-translate/data:/data
+      - /media/ZimaOS-HD/Kitap:/kaynak:ro
     environment:
       - OLLAMA_URL=http://ollama:11434
       - LLM_MODEL=gemma3:12b

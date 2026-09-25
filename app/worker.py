@@ -4,7 +4,7 @@ import traceback
 
 from . import db
 from .extract import extract
-from .translate import OllamaEngine, detect, needs_translation
+from .translate import OllamaEngine, RefusalError, detect, needs_translation
 
 
 class Worker(threading.Thread):
@@ -42,6 +42,8 @@ class Worker(threading.Thread):
         for attempt in range(4):
             try:
                 return self.engine.translate(seg["src"], seg["kind"], glossary, prev)
+            except RefusalError:
+                return None
             except Exception as e:
                 last = e
                 time.sleep(5 * (attempt + 1))
@@ -63,13 +65,24 @@ class Worker(threading.Thread):
             for seg in db.pending_segments(jid):
                 if db.get_status(jid) != "running":
                     return
+                failed = False
                 if needs_translation(seg["src"], seg["lang"]):
                     out = self._translate(seg, db.glossary_pairs(), db.prev_out(jid, seg["idx"]))
+                    if out is None:
+                        failed = True
+                        out = "[Çevrilemedi] " + seg["src"]
                 else:
                     out = seg["src"]
                 now = time.time()
                 db.save_segment(jid, seg["idx"], out, len(seg["src"]), now - t)
                 t = now
+                if failed:
+                    db.mark_failed(jid)
+                    j = db.get_job(jid)
+                    if j["failed"] >= 5 and j["failed"] > j["done"] * 0.5:
+                        db.set_error(jid, "Paragrafların çoğu çevrilemiyor. Dosya taranmış ya da metni okunamayan "
+                                          "bir PDF olabilir (resimden okuma başarısız).")
+                        return
             db.finish(jid)
         except Exception as e:
             traceback.print_exc()

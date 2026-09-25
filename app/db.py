@@ -60,6 +60,9 @@ def init():
               id INTEGER PRIMARY KEY AUTOINCREMENT, src TEXT UNIQUE, tgt TEXT);
             """
         )
+        cols = [r[1] for r in c.execute("PRAGMA table_info(jobs)")]
+        if "failed" not in cols:
+            c.execute("ALTER TABLE jobs ADD COLUMN failed INTEGER DEFAULT 0")
         if c.execute("SELECT COUNT(*) FROM glossary").fetchone()[0] == 0:
             c.executemany("INSERT INTO glossary(src,tgt) VALUES(?,?)", DEFAULT_GLOSSARY)
         c.execute("UPDATE jobs SET status='queued' WHERE status='running'")
@@ -148,6 +151,10 @@ def save_segment(job_id, idx, out, chars, seconds):
             "UPDATE jobs SET done=done+1, done_chars=done_chars+?, elapsed=elapsed+? WHERE id=?",
             (chars, seconds, job_id),
         )
+
+
+def mark_failed(job_id):
+    x("UPDATE jobs SET failed=COALESCE(failed,0)+1 WHERE id=?", (job_id,))
 
 
 def finish(job_id):

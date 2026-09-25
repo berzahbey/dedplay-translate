@@ -46,6 +46,22 @@ button.link { border: 0; background: none; color: var(--lapis); padding: 4px 6px
 button.danger { color: var(--danger); }
 button:focus-visible, select:focus-visible, input:focus-visible, summary:focus-visible { outline: 2px solid var(--lapis); outline-offset: 2px; }
 .hint { font-size: .85rem; color: var(--muted); }
+.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); }
+.tab { border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: none; color: var(--muted); padding: 8px 12px; }
+.tab.on { color: var(--ink); border-bottom-color: var(--tile); font-weight: 600; }
+.srv { display: grid; gap: 10px; }
+.crumbs { display: flex; flex-wrap: wrap; gap: 2px; align-items: center; font-size: .9rem; }
+.crumbs button { border: 0; background: none; color: var(--lapis); padding: 2px 4px; }
+.crumbs span { color: var(--muted); }
+.srvlist { list-style: none; margin: 0; padding: 0; max-height: 340px; overflow-y: auto; border: 1px solid var(--line); border-radius: 8px; background: var(--paper); }
+.srvlist li { border-bottom: 1px solid var(--line); }
+.srvlist li:last-child { border-bottom: 0; }
+.srvlist button { width: 100%; text-align: left; border: 0; border-radius: 0; background: none; padding: 9px 12px; display: flex; gap: 10px; align-items: center; overflow-wrap: anywhere; }
+.srvlist button:hover { background: var(--tile-soft); }
+.srvlist button.sel { background: var(--tile-soft); font-weight: 600; }
+.srvlist .ic { width: 1.2em; flex: none; text-align: center; }
+.srvlist .sz { margin-left: auto; color: var(--muted); font-size: .82rem; white-space: nowrap; }
+.warn { color: var(--danger); }
 .jobs { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--line); }
 .job { padding: 20px 0; border-bottom: 1px solid var(--line); }
 .job-head { display: flex; justify-content: space-between; gap: 16px; align-items: baseline; flex-wrap: wrap; }
@@ -90,9 +106,23 @@ td:last-child { width: 1%; }
   <div class="engine"><span class="dot" id="dot"></span><span id="engine">Durum alınıyor…</span></div>
 
   <form class="drop" id="drop">
-    <p><strong>Kitap dosyasını buraya bırakın</strong> ya da seçin.</p>
-    <div class="row">
-      <input type="file" id="file" multiple accept=".epub,.pdf,.docx,.txt,.png,.jpg,.jpeg,.webp,.tif,.tiff">
+    <div class="tabs" role="tablist">
+      <button type="button" class="tab on" data-tab="pc" role="tab">Bilgisayardan yükle</button>
+      <button type="button" class="tab" data-tab="srv" role="tab">Sunucudan seç</button>
+    </div>
+    <div id="pcPane">
+      <p><strong>Kitap dosyasını buraya bırakın</strong> ya da seçin.</p>
+      <div class="row">
+        <input type="file" id="file" multiple accept=".epub,.pdf,.docx,.txt,.png,.jpg,.jpeg,.webp,.tif,.tiff">
+      </div>
+    </div>
+    <div id="srvPane" class="srv" hidden>
+      <div class="row">
+        <nav class="crumbs" id="crumbs" aria-label="Klasör yolu"></nav>
+        <input type="text" id="srvfilter" placeholder="Bu klasörde ara" style="margin-left:auto">
+      </div>
+      <ul class="srvlist" id="srvlist"></ul>
+      <p class="hint" id="srvsel">Çevirmek istediğin dosyalara tıkla; birden fazla seçebilirsin.</p>
     </div>
     <div class="row">
       <label class="f">Kaynak dil
@@ -157,6 +187,7 @@ function jobHTML(j) {
   let meta = j.total ? `${j.done} / ${j.total} paragraf, %${pct}` : "Metin çıkarılıyor";
   if (j.eta && j.status === "running") meta += `. Tahmini kalan süre ${dur(j.eta)}`;
   if (j.status === "done" && j.elapsed) meta = `${j.total} paragraf ${dur(j.elapsed)} içinde çevrildi`;
+  if (j.failed) meta += `. ${j.failed} paragraf çevrilemedi (çıktıda [Çevrilemedi] ile işaretli)`;
   const canDl = j.done > 0;
   return `
   <li class="job" data-id="${j.id}">
@@ -240,8 +271,74 @@ async function upload(files) {
   lastJobs = ""; loadJobs();
 }
 
+let mode = "pc", srvData = null;
+const srvSel = new Set();
+const joinPath = (a, b) => (a ? a + "/" : "") + b;
+const fsize = (n) => n > 1048576 ? (n / 1048576).toFixed(1) + " MB" : Math.max(1, Math.round(n / 1024)) + " KB";
+
+document.querySelectorAll(".tab").forEach(t => t.addEventListener("click", () => {
+  mode = t.dataset.tab;
+  document.querySelectorAll(".tab").forEach(x => x.classList.toggle("on", x === t));
+  $("pcPane").hidden = mode !== "pc"; $("srvPane").hidden = mode !== "srv";
+  if (mode === "srv" && !srvData) loadSrv("");
+  updateSendLabel();
+}));
+
+function updateSendLabel() {
+  $("send").textContent = mode === "srv" && srvSel.size ? `Çeviriyi başlat (${srvSel.size} dosya)` : "Çeviriyi başlat";
+  $("srvsel").textContent = srvSel.size
+    ? `Seçilenler: ${[...srvSel].map(p => p.split("/").pop()).join(", ")}`
+    : "Çevirmek istediğin dosyalara tıkla; birden fazla seçebilirsin.";
+}
+
+async function loadSrv(path) {
+  try {
+    const d = await api(`/api/browse?path=${encodeURIComponent(path)}`);
+    if (!d.available) {
+      $("srvlist").innerHTML = `<li><p class="hint" style="padding:12px">Sunucu kitap klasörü bu uygulamaya bağlı değil.</p></li>`;
+      return;
+    }
+    srvData = d; $("srvfilter").value = ""; renderSrv();
+  } catch (err) { $("srvlist").innerHTML = `<li><p class="hint warn" style="padding:12px">${esc(err.message)}</p></li>`; }
+}
+
+function renderSrv() {
+  const d = srvData, parts = d.path ? d.path.split("/") : [];
+  $("crumbs").innerHTML = `<button type="button" data-go="">Kitap</button>` + parts.map((p, i) =>
+    `<span>/</span><button type="button" data-go="${esc(parts.slice(0, i + 1).join("/"))}">${esc(p)}</button>`).join("");
+  const q = $("srvfilter").value.toLocaleLowerCase("tr");
+  const ok = (n) => !q || n.toLocaleLowerCase("tr").includes(q);
+  const up = d.path ? `<li><button type="button" data-go="${esc(parts.slice(0, -1).join("/"))}"><span class="ic">↩</span>Üst klasör</button></li>` : "";
+  const dirs = d.dirs.filter(ok).map(n => `<li><button type="button" data-go="${esc(joinPath(d.path, n))}"><span class="ic">📁</span>${esc(n)}</button></li>`).join("");
+  const files = d.files.filter(f => ok(f.name)).map(f => { const p = joinPath(d.path, f.name);
+    return `<li><button type="button" class="${srvSel.has(p) ? "sel" : ""}" data-file="${esc(p)}"><span class="ic">${srvSel.has(p) ? "✔" : "📄"}</span>${esc(f.name)}<span class="sz">${fsize(f.size)}</span></button></li>`; }).join("");
+  $("srvlist").innerHTML = up + dirs + files || `<li><p class="hint" style="padding:12px">Bu klasörde uygun dosya yok.</p></li>`;
+}
+
+$("srvfilter").addEventListener("input", () => srvData && renderSrv());
+$("srvPane").addEventListener("click", (e) => {
+  const b = e.target.closest("button"); if (!b) return;
+  if (b.dataset.go !== undefined) return loadSrv(b.dataset.go);
+  if (b.dataset.file) { const p = b.dataset.file; srvSel.has(p) ? srvSel.delete(p) : srvSel.add(p); renderSrv(); updateSendLabel(); }
+});
+
+async function uploadServer() {
+  if (!srvSel.size) return alert("Önce sunucudan en az bir dosya seç.");
+  $("send").disabled = true;
+  try {
+    for (const p of srvSel) {
+      $("send").textContent = `Sıraya ekleniyor: ${p.split("/").pop()}`;
+      await api("/api/jobs/from-server", { method: "POST", headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({ path: p, src_lang: $("lang").value }) });
+    }
+    srvSel.clear(); renderSrv();
+  } catch (err) { alert("Eklenemedi: " + err.message); }
+  $("send").disabled = false; updateSendLabel();
+  lastJobs = ""; loadJobs();
+}
+
 const drop = $("drop");
-drop.addEventListener("submit", (e) => { e.preventDefault(); upload([...$("file").files]); });
+drop.addEventListener("submit", (e) => { e.preventDefault(); mode === "srv" ? uploadServer() : upload([...$("file").files]); });
 ["dragenter","dragover"].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add("over"); }));
 ["dragleave","drop"].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove("over"); }));
 drop.addEventListener("drop", e => upload([...e.dataTransfer.files]));
